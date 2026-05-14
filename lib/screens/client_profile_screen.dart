@@ -1,0 +1,367 @@
+import 'package:flutter/material.dart';
+import '../services/client_api_service.dart';
+import '../services/local_storage_service.dart';
+import '../models/client_profile.dart';
+import '../main.dart';
+import 'session_history_screen.dart';
+import 'active_bookings_screen.dart';
+import 'order_history_screen.dart';
+import 'support_screen.dart';
+import 'login_screen.dart';
+
+class ClientProfileScreen extends StatefulWidget {
+  final int clientId;
+
+  const ClientProfileScreen({
+    super.key,
+    required this.clientId,
+  });
+
+  @override
+  _ClientProfileScreenState createState() => _ClientProfileScreenState();
+}
+
+class _ClientProfileScreenState extends State<ClientProfileScreen> {
+  late ClientApiService _apiService;
+  ClientProfile? _profile;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiService = ClientApiService();
+    loadProfile();
+  }
+
+  Future<void> loadProfile() async {
+    setState(() => _isLoading = true);
+    try {
+      _profile = await _apiService.getClientProfile(widget.clientId);
+      if (_profile != null) {
+        await LocalStorageService.saveClientProfile(_profile!);
+      }
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      debugPrint('Error loading profile: $e');
+    }
+  }
+
+  void _handleLogout() async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Выход'),
+        content: const Text('Вы уверены, что хотите выйти из аккаунта?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ОТМЕНА'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await LocalStorageService.clearSession();
+              if (mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text('ВЫЙТИ', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Личный кабинет'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _handleLogout,
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: loadProfile,
+        child: _buildBody(),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading && _profile == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_profile == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Профиль не найден', style: TextStyle(fontSize: 18)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: loadProfile,
+              child: const Text('Попробовать снова'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                child: Text(
+                  _profile!.name.isNotEmpty ? _profile!.name[0].toUpperCase() : '?',
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _profile!.name,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    Text('ID: ${_profile!.id}', style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _buildBalanceCard(),
+          const SizedBox(height: 24),
+          const Text('Настройки и услуги', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          _buildMenuTile(
+            icon: Icons.event_available,
+            title: 'Мои бронирования',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ActiveBookingsScreen(clientId: _profile!.id),
+                ),
+              );
+            },
+          ),
+          _buildMenuTile(
+            icon: Icons.shopping_bag_outlined,
+            title: 'История заказов',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => OrderHistoryScreen(clientId: _profile!.id),
+                ),
+              );
+            },
+          ),
+          _buildMenuTile(
+            icon: Icons.history,
+            title: 'История сессий (игры)',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SessionHistoryScreen(clientId: _profile!.id),
+                ),
+              );
+            },
+          ),
+          _buildMenuTile(
+            icon: isDark ? Icons.light_mode : Icons.dark_mode,
+            title: isDark ? 'Светлая тема' : 'Темная тема',
+            onTap: () {
+              MyApp.of(context).changeTheme(
+                isDark ? ThemeMode.light : ThemeMode.dark,
+              );
+            },
+          ),
+          _buildMenuTile(
+            icon: Icons.contact_support_outlined,
+            title: 'Поддержка',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SupportScreen(),
+                ),
+              );
+            },
+          ),
+          _buildMenuTile(
+            icon: Icons.exit_to_app,
+            title: 'Выйти из аккаунта',
+            onTap: _handleLogout,
+            isDestructive: true,
+          ),
+          const SizedBox(height: 24),
+          _buildInfoCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuTile({
+    required IconData icon, 
+    required String title, 
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    return Card(
+      elevation: 0,
+      color: isDestructive 
+          ? Colors.red.withOpacity(0.1) 
+          : Theme.of(context).cardTheme.color ?? Colors.grey.withOpacity(0.05),
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ListTile(
+        leading: Icon(icon, color: isDestructive ? Colors.red : Colors.blue),
+        title: Text(
+          title, 
+          style: TextStyle(
+            color: isDestructive ? Colors.red : Theme.of(context).textTheme.bodyLarge?.color,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right, size: 20),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Контактная информация', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.phone, size: 20, color: Colors.grey),
+                const SizedBox(width: 12),
+                Text(_profile!.phone),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.email, size: 20, color: Colors.grey),
+                const SizedBox(width: 12),
+                Text(_profile!.email),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBalanceCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Colors.blue, Colors.indigo],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Текущий баланс', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const SizedBox(height: 4),
+              Text(
+                '${_profile!.balance.toStringAsFixed(2)} ₽', 
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.blue,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _showTopUpDialog,
+            child: const Text('Пополнить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTopUpDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Пополнение баланса'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Сумма (₽)',
+            suffixText: '₽',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ОТМЕНА'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Перенаправление на оплату...')),
+              );
+            },
+            child: const Text('ПОПОЛНИТЬ'),
+          ),
+        ],
+      ),
+    );
+  }
+}
