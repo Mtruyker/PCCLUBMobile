@@ -4,6 +4,7 @@ import '../models/client_profile.dart';
 class LocalStorageService {
   static const String _settingsBoxName = 'settings';
   static const String _clientIdKey = 'client_id';
+  static const String _passwordPrefix = 'password_';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -23,6 +24,16 @@ class LocalStorageService {
   static Future<void> clearSession() async {
     var box = Hive.box(_settingsBoxName);
     await box.delete(_clientIdKey);
+  }
+
+  static Future<void> saveClientPassword(String phone, String password) async {
+    var box = Hive.box(_settingsBoxName);
+    await box.put('$_passwordPrefix$phone', password);
+  }
+
+  static String? getClientPassword(String phone) {
+    var box = Hive.box(_settingsBoxName);
+    return box.get('$_passwordPrefix$phone');
   }
 
   static Future<void> saveClientProfile(ClientProfile profile) async {

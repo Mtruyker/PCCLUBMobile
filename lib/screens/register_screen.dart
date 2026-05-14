@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/client_api_service.dart';
+import '../services/local_storage_service.dart';
 import 'main_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -26,7 +27,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (name.isEmpty || phone.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пожалуйста, заполните обязательные поля')),
+        const SnackBar(
+          content: Text('Пожалуйста, заполните обязательные поля'),
+        ),
       );
       return;
     }
@@ -34,36 +37,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Имитация вызова API для регистрации
-      await Future.delayed(const Duration(seconds: 1));
-      
+      final clientId = await _apiService.register(name, phone, password, email);
+      await LocalStorageService.saveClientId(clientId);
+      await LocalStorageService.saveClientPassword(phone, password);
+
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Успешно!'),
-            content: const Text('Регистрация прошла успешно. Теперь вы можете войти в систему.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // Close dialog
-                  Navigator.pop(context); // Back to Login
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const MainScreen()),
+          (route) => false,
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка регистрации: $e')),
-        );
+        final message = e.toString().replaceAll('Exception: ', '');
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка регистрации: $message')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -92,7 +95,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             padding: const EdgeInsets.only(top: 80, bottom: 20),
             child: Card(
               elevation: 8,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
                 child: Column(
@@ -100,7 +105,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     const Text(
                       'РЕГИСТРАЦИЯ',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue),
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
                     ),
                     const SizedBox(height: 32),
                     TextField(
@@ -140,8 +149,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         prefixIcon: const Icon(Icons.lock),
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                     ),
@@ -153,12 +168,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         onPressed: _isLoading ? null : _handleRegister,
-                        child: _isLoading 
-                          ? const CircularProgressIndicator(color: Colors.white) 
-                          : const Text('ЗАРЕГИСТРИРОВАТЬСЯ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        child: _isLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : const Text(
+                                'ЗАРЕГИСТРИРОВАТЬСЯ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
                     ),
                   ],

@@ -34,23 +34,33 @@ class NewsDetailScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.calendar_today, size: 16, color: Colors.blue.shade700),
+                      Icon(
+                        Icons.calendar_today,
+                        size: 16,
+                        color: Colors.blue.shade700,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         DateFormat('dd MMMM yyyy', 'ru').format(news.date),
-                        style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   Text(
                     news.title,
-                    style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(
                     news.content,
-                    style: const TextStyle(fontSize: 18, lineHeight: 1.5),
+                    style: const TextStyle(fontSize: 18, height: 1.5),
                   ),
                   const SizedBox(height: 40),
                   // Добавим кнопку "Поделиться" для реалистичности

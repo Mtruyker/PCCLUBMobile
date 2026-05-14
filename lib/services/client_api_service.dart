@@ -9,12 +9,14 @@ import '../models/cart_item.dart';
 import 'local_storage_service.dart';
 
 class ClientApiService {
-  static const String baseUrl = 'https://serverpcclub-production.up.railway.app/api';
+  static const String baseUrl =
+      'https://serverpcclub-production.up.railway.app/api';
 
   // Получение профиля клиента
   Future<ClientProfile> getClientProfile(int clientId) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/clients'))
+      final response = await http
+          .get(Uri.parse('$baseUrl/clients'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -33,18 +35,24 @@ class ClientApiService {
   }
 
   // Регистрация нового клиента
-  Future<int> register(String name, String phone, String password, String email) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/clients'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'name': name,
-        'phone': phone,
-        'password': password,
-        'email': email,
-        'balance': 0.0,
-      }),
-    ).timeout(const Duration(seconds: 10));
+  Future<int> register(
+    String name,
+    String phone,
+    String password,
+    String email,
+  ) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/clients'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'name': name,
+            'phone': phone,
+            'email': email,
+            'balance': 0.0,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 201 || response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -58,7 +66,8 @@ class ClientApiService {
   Future<int> login(String phone, String password) async {
     // В реальности здесь был бы запрос к /api/login, который возвращает JWT и ID
     // Пока ищем клиента по номеру телефона в списке
-    final response = await http.get(Uri.parse('$baseUrl/clients'))
+    final response = await http
+        .get(Uri.parse('$baseUrl/clients'))
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
@@ -67,6 +76,13 @@ class ClientApiService {
         (c) => c['phone'] == phone,
         orElse: () => throw Exception('Пользователь не найден'),
       );
+      final serverPassword = client['password']?.toString();
+      final localPassword = LocalStorageService.getClientPassword(phone);
+      final savedPassword = serverPassword ?? localPassword;
+
+      if (savedPassword != null && savedPassword != password) {
+        throw Exception('Неверный пароль');
+      }
       return client['id'];
     } else {
       throw Exception('Ошибка авторизации');
@@ -75,7 +91,8 @@ class ClientApiService {
 
   // Каталог товаров и услуг
   Future<List<CatalogItem>> getCatalogItems() async {
-    final response = await http.get(Uri.parse('$baseUrl/items'))
+    final response = await http
+        .get(Uri.parse('$baseUrl/items'))
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
@@ -88,7 +105,8 @@ class ClientApiService {
 
   // Новости клуба
   Future<List<NewsItem>> getNews() async {
-    final response = await http.get(Uri.parse('$baseUrl/news'))
+    final response = await http
+        .get(Uri.parse('$baseUrl/news'))
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
@@ -101,25 +119,27 @@ class ClientApiService {
 
   // Оформление заказа (товары из корзины)
   Future<bool> placeOrder(int clientId, List<CartItem> items) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/orders'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'clientId': clientId,
-        'items': items.map((i) => {
-          'productId': i.product.id,
-          'quantity': i.quantity,
-        }).toList(),
-        'date': DateTime.now().toIso8601String(),
-      }),
-    ).timeout(const Duration(seconds: 10));
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/orders'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'clientId': clientId,
+            'items': items
+                .map((i) => {'productId': i.product.id, 'quantity': i.quantity})
+                .toList(),
+            'date': DateTime.now().toIso8601String(),
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
 
     return response.statusCode == 201 || response.statusCode == 200;
   }
 
   // История сессий клиента
   Future<List<Session>> getSessionHistory(int clientId) async {
-    final response = await http.get(Uri.parse('$baseUrl/clients/$clientId/sessions'))
+    final response = await http
+        .get(Uri.parse('$baseUrl/clients/$clientId/sessions'))
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
@@ -133,7 +153,8 @@ class ClientApiService {
   // Активные бронирования клиента
   Future<List<Booking>> getActiveBookings(int clientId) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/clients/$clientId/bookings'))
+      final response = await http
+          .get(Uri.parse('$baseUrl/clients/$clientId/bookings'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -148,31 +169,66 @@ class ClientApiService {
 
   // Список доступных ПК для бронирования
   Future<List<String>> getAvailablePCs() async {
-    final response = await http.get(Uri.parse('$baseUrl/pcs/available'))
+    final response = await http
+        .get(Uri.parse('$baseUrl/pcs/available'))
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       List<dynamic> data = json.decode(response.body);
-      return List<String>.from(data);
+      return data
+          .map((pc) {
+            if (pc is String) return pc;
+            if (pc is Map<String, dynamic>) return pc['name']?.toString() ?? '';
+            return '';
+          })
+          .where((name) => name.isNotEmpty)
+          .toList();
     } else {
       throw Exception('Failed to load available PCs');
     }
   }
 
   // Создание нового бронирования
-  Future<bool> createBooking(int clientId, String pcName, DateTime startTime, int duration) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/bookings'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'clientId': clientId,
-        'pcName': pcName,
-        'startTime': startTime.toIso8601String(),
-        'duration': duration,
-      }),
-    ).timeout(const Duration(seconds: 15));
+  Future<bool> createBooking(
+    int clientId,
+    String pcName,
+    DateTime startTime,
+    int duration,
+  ) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/bookings'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'clientId': clientId,
+            'pcName': pcName,
+            'startTime': startTime.toIso8601String(),
+            'duration': duration,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
 
-    return response.statusCode == 201 || response.statusCode == 200;
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      return true;
+    }
+
+    throw Exception(_getErrorMessage(response));
+  }
+
+  String _getErrorMessage(http.Response response) {
+    try {
+      final data = json.decode(response.body);
+      if (data is Map && data['error'] != null) {
+        return data['error'].toString();
+      }
+      if (data is Map && data['message'] != null) {
+        return data['message'].toString();
+      }
+    } catch (_) {
+      // Fall through to a generic HTTP message.
+    }
+
+    return 'HTTP ${response.statusCode}: ${response.body}';
   }
 
   // Обновление профиля клиента
