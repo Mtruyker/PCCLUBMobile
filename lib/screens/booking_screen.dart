@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../services/client_api_service.dart';
-import '../services/local_storage_service.dart';
-import '../utils/error_handler.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
+import '../services/client_api_service.dart';
+import '../utils/error_handler.dart';
 
 class BookingScreen extends StatefulWidget {
   final String? initialPcName;
@@ -32,28 +32,68 @@ class _BookingScreenState extends State<BookingScreen> {
     try {
       final apiService = Provider.of<ClientApiService>(context, listen: false);
       final pcs = await apiService.getAvailablePCs();
+      final matchedInitialPc = _matchPcName(widget.initialPcName, pcs);
+
       setState(() {
         _pcs = pcs;
         _isLoadingPcs = false;
 
-        // Приоритет: 1. Переданный извне ПК, 2. Первый из списка
-        if (widget.initialPcName != null &&
-            _pcs.contains(widget.initialPcName)) {
-          _selectedPc = widget.initialPcName;
+        if (matchedInitialPc != null) {
+          _selectedPc = matchedInitialPc;
         } else if (_pcs.isNotEmpty) {
-          _selectedPc = _pcs[0];
+          _selectedPc = _pcs.first;
         }
       });
     } catch (e) {
       setState(() => _isLoadingPcs = false);
       if (mounted) {
-        ErrorHandler.show(context, e, customMessage: 'Не удалось загрузить список компьютеров');
+        ErrorHandler.show(
+          context,
+          e,
+          customMessage: 'Не удалось загрузить список компьютеров',
+        );
       }
     }
   }
 
+  String? _matchPcName(String? requestedPcName, List<String> pcs) {
+    if (requestedPcName == null || pcs.isEmpty) {
+      return null;
+    }
+
+    if (pcs.contains(requestedPcName)) {
+      return requestedPcName;
+    }
+
+    final requestedDigits = RegExp(r'\d+')
+        .allMatches(requestedPcName)
+        .map((m) => m.group(0))
+        .whereType<String>()
+        .map((value) => value.padLeft(2, '0'))
+        .toSet();
+
+    if (requestedDigits.isEmpty) {
+      return null;
+    }
+
+    for (final pc in pcs) {
+      final pcDigits = RegExp(r'\d+')
+          .allMatches(pc)
+          .map((m) => m.group(0))
+          .whereType<String>()
+          .map((value) => value.padLeft(2, '0'))
+          .toSet();
+
+      if (pcDigits.any(requestedDigits.contains)) {
+        return pc;
+      }
+    }
+
+    return null;
+  }
+
   Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime.now(),
@@ -65,7 +105,7 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _selectTime() async {
-    final TimeOfDay? picked = await showTimePicker(
+    final picked = await showTimePicker(
       context: context,
       initialTime: _selectedTime,
       builder: (context, child) {
@@ -86,12 +126,8 @@ class _BookingScreenState extends State<BookingScreen> {
     return '$hour:$minute';
   }
 
-  void _confirmBooking() async {
-    if (_selectedPc == null) return;
-
-    final clientId = LocalStorageService.getClientId();
-    if (clientId == null) {
-      ErrorHandler.show(context, 'Ошибка: пользователь не авторизован');
+  Future<void> _confirmBooking() async {
+    if (_selectedPc == null) {
       return;
     }
 
@@ -112,14 +148,13 @@ class _BookingScreenState extends State<BookingScreen> {
     try {
       final apiService = Provider.of<ClientApiService>(context, listen: false);
       final success = await apiService.createBooking(
-        clientId,
         _selectedPc!,
         startDateTime,
         _duration,
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // Закрыть индикатор загрузки
+      Navigator.pop(context);
 
       if (success) {
         showDialog(
@@ -132,9 +167,9 @@ class _BookingScreenState extends State<BookingScreen> {
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context); // Закрыть диалог
+                  Navigator.pop(context);
                   if (Navigator.canPop(context)) {
-                    Navigator.pop(context); // Вернуться назад
+                    Navigator.pop(context);
                   }
                 },
                 child: const Text('OK'),
@@ -143,11 +178,14 @@ class _BookingScreenState extends State<BookingScreen> {
           ),
         );
       } else {
-        ErrorHandler.show(context, 'Ошибка при бронировании. Попробуйте другое время.');
+        ErrorHandler.show(
+          context,
+          'Ошибка при бронировании. Попробуйте другое время.',
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Закрыть индикатор загрузки
+      Navigator.pop(context);
       ErrorHandler.show(context, e, customMessage: 'Ошибка при бронировании');
     }
   }
@@ -159,7 +197,7 @@ class _BookingScreenState extends State<BookingScreen> {
       body: _isLoadingPcs
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -186,13 +224,13 @@ class _BookingScreenState extends State<BookingScreen> {
                           value: _selectedPc,
                           items: _pcs
                               .map(
-                                (pc) => DropdownMenuItem(
+                                (pc) => DropdownMenuItem<String>(
                                   value: pc,
                                   child: Text(pc),
                                 ),
                               )
                               .toList(),
-                          onChanged: (val) => setState(() => _selectedPc = val),
+                          onChanged: (value) => setState(() => _selectedPc = value),
                         ),
                       ),
                     ),
@@ -212,10 +250,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           ),
                           title: const Text('Дата'),
                           subtitle: Text(
-                            DateFormat(
-                              'dd MMMM yyyy',
-                              'ru',
-                            ).format(_selectedDate),
+                            DateFormat('dd MMMM yyyy', 'ru').format(_selectedDate),
                           ),
                           onTap: _selectDate,
                         ),
@@ -259,7 +294,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     max: 12,
                     divisions: 11,
                     label: '$_duration ч.',
-                    onChanged: (val) => setState(() => _duration = val.toInt()),
+                    onChanged: (value) => setState(() => _duration = value.toInt()),
                   ),
                   const SizedBox(height: 40),
                   SizedBox(
@@ -273,7 +308,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: _confirmBooking,
+                      onPressed: _pcs.isEmpty ? null : _confirmBooking,
                       child: const Text(
                         'Подтвердить бронирование',
                         style: TextStyle(fontSize: 18),

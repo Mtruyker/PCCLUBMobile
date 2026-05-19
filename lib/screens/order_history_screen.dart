@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 import '../models/order.dart';
 import '../services/client_api_service.dart';
 import '../utils/error_handler.dart';
-import 'package:intl/intl.dart';
 
 class OrderHistoryScreen extends StatefulWidget {
-  final int clientId;
-
-  const OrderHistoryScreen({super.key, required this.clientId});
+  const OrderHistoryScreen({super.key});
 
   @override
   State<OrderHistoryScreen> createState() => _OrderHistoryScreenState();
@@ -27,20 +26,50 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   Future<void> _loadOrders() async {
     try {
       setState(() => _isLoading = true);
+      final orders = await _apiService.getClientOrders();
 
-      final orders = await _apiService.getClientOrders(widget.clientId);
-
-      if (mounted) {
-        setState(() {
-          _orders = orders;
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _orders = orders;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ErrorHandler.show(context, e);
-      }
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ErrorHandler.show(context, e, customMessage: 'Не удалось загрузить заказы');
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'new':
+        return 'Новый';
+      case 'paid':
+        return 'Оплачен';
+      case 'preparing':
+        return 'Готовится';
+      case 'done':
+        return 'Готов';
+      case 'cancelled':
+        return 'Отменен';
+      default:
+        return status;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'done':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      case 'paid':
+        return Colors.blue;
+      case 'preparing':
+        return Colors.orange;
+      case 'new':
+      default:
+        return Colors.grey;
     }
   }
 
@@ -61,8 +90,10 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                         children: [
                           Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey),
                           SizedBox(height: 16),
-                          Text('Вы еще ничего не заказывали',
-                            style: TextStyle(fontSize: 16, color: Colors.grey)),
+                          Text(
+                            'Вы еще ничего не заказывали',
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
                         ],
                       ),
                     )
@@ -70,8 +101,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                       padding: const EdgeInsets.all(16),
                       itemCount: _orders.length,
                       itemBuilder: (context, index) {
-                        final order = _orders[index];
-                        return _buildOrderCard(order);
+                        return _buildOrderCard(_orders[index]);
                       },
                     ),
             ),
@@ -79,6 +109,8 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   }
 
   Widget _buildOrderCard(Order order) {
+    final statusColor = _statusColor(order.status);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: ExpansionTile(
@@ -86,25 +118,34 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
           backgroundColor: Colors.orangeAccent,
           child: Icon(Icons.fastfood, color: Colors.white, size: 20),
         ),
-        title: Text('Заказ #${order.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          'Заказ #${order.id}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         subtitle: Text(DateFormat('dd.MM.yyyy HH:mm').format(order.date)),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text('${order.totalAmount.toStringAsFixed(0)} ₽', 
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-            Text(order.status == 'delivered' ? 'Доставлено' : 'В обработке', 
-              style: TextStyle(fontSize: 10, color: order.status == 'delivered' ? Colors.green : Colors.orange)),
+            Text(
+              '${order.totalAmount.toStringAsFixed(0)} ₽',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+            ),
+            Text(
+              _statusLabel(order.status),
+              style: TextStyle(fontSize: 10, color: statusColor),
+            ),
           ],
         ),
         children: [
           const Divider(),
-          ...order.items.map((item) => ListTile(
-            dense: true,
-            title: Text(item.productName),
-            trailing: Text('${item.quantity} x ${item.price.toStringAsFixed(0)} ₽'),
-          )),
+          ...order.items.map(
+            (item) => ListTile(
+              dense: true,
+              title: Text(item.productName),
+              trailing: Text('${item.quantity} x ${item.price.toStringAsFixed(0)} ₽'),
+            ),
+          ),
           const SizedBox(height: 8),
         ],
       ),

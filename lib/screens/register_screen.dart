@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../services/client_api_service.dart';
-import '../services/local_storage_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/error_handler.dart';
 import '../utils/validation_utils.dart';
-import '../theme/app_theme.dart';
+import 'login_screen.dart';
 import 'main_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -15,12 +16,19 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  static const TextStyle _authInputStyle = TextStyle(
+    color: AppColors.textPrimary,
+    fontSize: 16,
+    fontWeight: FontWeight.w500,
+  );
+
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -39,14 +47,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final apiService = Provider.of<ClientApiService>(context, listen: false);
-      final clientId = await apiService.register(name, phone, password, email);
-      await LocalStorageService.saveClientId(clientId);
+      final session = await apiService.register(name, phone, password, email);
 
-      if (mounted) {
-        ErrorHandler.showSuccess(context, 'Регистрация успешно завершена!');
+      if (!mounted) return;
+
+      ErrorHandler.showSuccess(context, 'Регистрация завершена');
+
+      if (session.isAuthenticated) {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const MainScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
           (route) => false,
         );
       }
@@ -55,7 +71,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ErrorHandler.show(context, e);
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -90,7 +108,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               key: _formKey,
               child: Container(
                 decoration: AppTheme.authCardDecoration,
-                padding: const EdgeInsets.all(32.0),
+                padding: const EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -104,6 +122,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 32),
                     TextFormField(
                       controller: _nameController,
+                      style: _authInputStyle,
+                      cursorColor: AppColors.primaryLight,
                       validator: ValidationUtils.validateName,
                       decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Имя',
@@ -114,6 +134,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
+                      style: _authInputStyle,
+                      cursorColor: AppColors.primaryLight,
                       validator: ValidationUtils.validatePhone,
                       decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Номер телефона',
@@ -124,11 +146,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
+                      style: _authInputStyle,
+                      cursorColor: AppColors.primaryLight,
                       validator: (value) {
                         if (value != null && value.isNotEmpty) {
                           return ValidationUtils.validateEmail(value);
                         }
-                        return null; // Email необязательный
+                        return null;
                       },
                       decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Email (необязательно)',
@@ -139,13 +163,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
+                      obscuringCharacter: '*',
+                      style: _authInputStyle,
+                      cursorColor: AppColors.primaryLight,
                       validator: ValidationUtils.validatePassword,
                       decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Пароль',
                         prefixIcon: Icons.lock,
                         suffixIcon: PasswordVisibilityButton(
                           isVisible: !_obscurePassword,
-                          onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                          onToggle: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
                         ),
                       ),
                     ),
@@ -153,16 +182,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _confirmPasswordController,
                       obscureText: _obscureConfirmPassword,
-                      validator: (value) => ValidationUtils.validatePasswordConfirmation(
-                        value,
-                        _passwordController.text,
-                      ),
+                      obscuringCharacter: '*',
+                      style: _authInputStyle,
+                      cursorColor: AppColors.primaryLight,
+                      validator: (value) {
+                        return ValidationUtils.validatePasswordConfirmation(
+                          value,
+                          _passwordController.text,
+                        );
+                      },
                       decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Подтвердите пароль',
                         prefixIcon: Icons.lock_outline,
                         suffixIcon: PasswordVisibilityButton(
                           isVisible: !_obscureConfirmPassword,
-                          onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                          onToggle: () {
+                            setState(
+                              () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                            );
+                          },
                         ),
                       ),
                     ),

@@ -14,12 +14,16 @@ class ClientProfile {
   });
 
   factory ClientProfile.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'] ?? json['clientId'] ?? json['userId'] ?? 0;
+    final parsedId = rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0;
+    final rawBalance = json['balance'] ?? json['walletBalance'] ?? 0;
+
     return ClientProfile(
-      id: json['id'],
-      name: json['name'],
+      id: parsedId,
+      name: (json['name'] ?? json['fullName'] ?? '').toString(),
       phone: json['phone'] ?? '',
       email: json['email'] ?? '',
-      balance: (json['balance'] as num).toDouble(),
+      balance: (rawBalance as num?)?.toDouble() ?? 0,
     );
   }
 

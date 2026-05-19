@@ -1,29 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/client_api_service.dart';
-import '../services/local_storage_service.dart';
+
 import '../models/client_profile.dart';
 import '../providers/theme_provider.dart';
-import 'session_history_screen.dart';
+import '../services/client_api_service.dart';
+import '../services/local_storage_service.dart';
+import '../utils/error_handler.dart';
 import 'active_bookings_screen.dart';
-import 'order_history_screen.dart';
-import 'support_screen.dart';
 import 'login_screen.dart';
+import 'order_history_screen.dart';
+import 'session_history_screen.dart';
+import 'support_screen.dart';
 
 class ClientProfileScreen extends StatefulWidget {
-  final int clientId;
-
-  const ClientProfileScreen({
-    super.key,
-    required this.clientId,
-  });
+  const ClientProfileScreen({super.key});
 
   @override
-  _ClientProfileScreenState createState() => _ClientProfileScreenState();
+  State<ClientProfileScreen> createState() => _ClientProfileScreenState();
 }
 
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
-  late ClientApiService _apiService;
+  late final ClientApiService _apiService;
   ClientProfile? _profile;
   bool _isLoading = true;
 
@@ -36,49 +33,58 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
   Future<void> loadProfile() async {
     setState(() => _isLoading = true);
+
     try {
-      _profile = await _apiService.getClientProfile(widget.clientId);
-      if (_profile != null) {
-        await LocalStorageService.saveClientProfile(_profile!);
-      }
+      final profile = await _apiService.getClientProfile();
+      if (!mounted) return;
       setState(() {
+        _profile = profile;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      debugPrint('Error loading profile: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ErrorHandler.show(context, e, customMessage: 'Не удалось загрузить профиль');
     }
   }
 
-  void _handleLogout() async {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Выход'),
-        content: const Text('Вы уверены, что хотите выйти из аккаунта?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('ОТМЕНА'),
+  Future<void> _handleLogout() async {
+    final shouldLogout = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Выход'),
+            content: const Text('Выйти из аккаунта?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Выйти', style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              await LocalStorageService.clearSession();
-              if (mounted) {
-                navigator.pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                  (route) => false,
-                );
-              }
-            },
-            child: const Text('ВЫЙТИ', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+        ) ??
+        false;
+
+    if (!shouldLogout) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final navigator = Navigator.of(context);
+    await LocalStorageService.clearSession();
+
+    if (mounted) {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -106,18 +112,23 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     }
 
     if (_profile == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Профиль не найден', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 16),
-            ElevatedButton(
+      return ListView(
+        children: [
+          SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+          const Center(
+            child: Text(
+              'Профиль не найден',
+              style: TextStyle(fontSize: 18),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: ElevatedButton(
               onPressed: loadProfile,
               child: const Text('Попробовать снова'),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -125,7 +136,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -136,7 +147,11 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 backgroundColor: Colors.blue.withValues(alpha: 0.1),
                 child: Text(
                   _profile!.name.isNotEmpty ? _profile!.name[0].toUpperCase() : '?',
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue),
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -148,7 +163,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       _profile!.name,
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
-                    Text('ID: ${_profile!.id}', style: const TextStyle(color: Colors.grey)),
+                    Text(
+                      _profile!.phone,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -157,7 +175,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           const SizedBox(height: 24),
           _buildBalanceCard(),
           const SizedBox(height: 24),
-          const Text('Настройки и услуги', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Настройки и услуги',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           _buildMenuTile(
             icon: Icons.event_available,
@@ -166,7 +187,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ActiveBookingsScreen(clientId: _profile!.id),
+                  builder: (context) => const ActiveBookingsScreen(),
                 ),
               );
             },
@@ -178,19 +199,19 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => OrderHistoryScreen(clientId: _profile!.id),
+                  builder: (context) => const OrderHistoryScreen(),
                 ),
               );
             },
           ),
           _buildMenuTile(
             icon: Icons.history,
-            title: 'История сессий (игры)',
+            title: 'История сессий',
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => SessionHistoryScreen(clientId: _profile!.id),
+                  builder: (context) => const SessionHistoryScreen(),
                 ),
               );
             },
@@ -208,9 +229,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const SupportScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SupportScreen()),
               );
             },
           ),
@@ -228,21 +247,21 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   }
 
   Widget _buildMenuTile({
-    required IconData icon, 
-    required String title, 
+    required IconData icon,
+    required String title,
     required VoidCallback onTap,
     bool isDestructive = false,
   }) {
     return Card(
       elevation: 0,
-      color: isDestructive 
+      color: isDestructive
           ? Colors.red.withValues(alpha: 0.1)
           : Theme.of(context).cardTheme.color ?? Colors.grey.withValues(alpha: 0.05),
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
         leading: Icon(icon, color: isDestructive ? Colors.red : Colors.blue),
         title: Text(
-          title, 
+          title,
           style: TextStyle(
             color: isDestructive ? Colors.red : Theme.of(context).textTheme.bodyLarge?.color,
             fontWeight: FontWeight.w500,
@@ -257,11 +276,14 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   Widget _buildInfoCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Контактная информация', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Контактная информация',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -275,7 +297,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
               children: [
                 const Icon(Icons.email, size: 20, color: Colors.grey),
                 const SizedBox(width: 12),
-                Text(_profile!.email),
+                Text(_profile!.email.isEmpty ? 'Не указан' : _profile!.email),
               ],
             ),
           ],
@@ -309,11 +331,18 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Текущий баланс', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const Text(
+                'Текущий баланс',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
               const SizedBox(height: 4),
               Text(
-                '${_profile!.balance.toStringAsFixed(2)} ₽', 
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                '${_profile!.balance.toStringAsFixed(2)} ₽',
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
@@ -321,7 +350,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: Colors.blue,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: _showTopUpDialog,
             child: const Text('Пополнить'),
@@ -349,7 +380,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('ОТМЕНА'),
+            child: const Text('Отмена'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -358,7 +389,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 const SnackBar(content: Text('Перенаправление на оплату...')),
               );
             },
-            child: const Text('ПОПОЛНИТЬ'),
+            child: const Text('Пополнить'),
           ),
         ],
       ),

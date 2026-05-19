@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'services/local_storage_service.dart';
-import 'screens/main_screen.dart';
-import 'screens/login_screen.dart';
-import 'providers/app_providers.dart';
-import 'theme/app_theme.dart';
-import 'providers/theme_provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:provider/provider.dart';
+
+import 'providers/app_providers.dart';
+import 'providers/theme_provider.dart';
+import 'screens/login_screen.dart';
+import 'screens/main_screen.dart';
+import 'services/client_api_service.dart';
+import 'services/local_storage_service.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,14 +16,21 @@ void main() async {
   try {
     await initializeDateFormatting('ru', null);
     await LocalStorageService.init();
+    await ClientApiService().restoreSession();
 
-    final clientId = LocalStorageService.getClientId();
+    final authToken = await LocalStorageService.getAuthToken();
 
-    runApp(PcClubApp(isLoggedIn: clientId != null));
+    runApp(PcClubApp(isLoggedIn: authToken != null && authToken.isNotEmpty));
   } catch (e) {
-    runApp(MaterialApp(
-      home: Scaffold(body: Center(child: Text('Ошибка запуска: $e'))),
-    ));
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text('Ошибка запуска: $e'),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -37,7 +46,7 @@ class PcClubApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: 'Личный кабинет ПК‑клуба',
+            title: 'Личный кабинет ПК-клуба',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

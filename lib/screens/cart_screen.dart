@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../services/cart_service.dart';
 import '../services/client_api_service.dart';
-import '../services/local_storage_service.dart';
+import '../utils/error_handler.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -14,14 +15,8 @@ class _CartScreenState extends State<CartScreen> {
   final CartService _cartService = CartService();
   final ClientApiService _apiService = ClientApiService();
 
-  void _placeOrder() async {
-    if (_cartService.items.isEmpty) return;
-
-    final clientId = LocalStorageService.getClientId();
-    if (clientId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ошибка: пользователь не авторизован')),
-      );
+  Future<void> _placeOrder() async {
+    if (_cartService.items.isEmpty) {
       return;
     }
 
@@ -32,49 +27,45 @@ class _CartScreenState extends State<CartScreen> {
     );
 
     try {
-      final success = await _apiService.placeOrder(clientId, _cartService.items);
-      
-      if (mounted) {
-        Navigator.pop(context); // Close loading
-        
-        if (success) {
-          _cartService.clearCart();
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Заказ принят!'),
-              content: const Text('Ваш заказ будет доставлен к вашему игровому месту в ближайшее время.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('ОТЛИЧНО'),
-                ),
-              ],
+      final success = await _apiService.placeOrder(_cartService.items);
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      if (success) {
+        _cartService.clearCart();
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Заказ принят!'),
+            content: const Text(
+              'Ваш заказ отправлен на сервер и появится в истории после обработки.',
             ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Ошибка при оформлении заказа на сервере')),
-          );
-        }
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                },
+                child: const Text('Отлично'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ErrorHandler.show(context, 'Ошибка при оформлении заказа');
       }
     } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка при оформлении заказа: $e')),
-        );
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
+      ErrorHandler.show(context, e, customMessage: 'Ошибка при оформлении заказа');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Корзина'),
@@ -110,7 +101,7 @@ class _CartScreenState extends State<CartScreen> {
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: Padding(
-                          padding: const EdgeInsets.all(12.0),
+                          padding: const EdgeInsets.all(12),
                           child: Row(
                             children: [
                               ClipRRect(
@@ -124,7 +115,10 @@ class _CartScreenState extends State<CartScreen> {
                                     width: 70,
                                     height: 70,
                                     color: Colors.grey.withValues(alpha: 0.2),
-                                    child: const Icon(Icons.fastfood_outlined, color: Colors.grey),
+                                    child: const Icon(
+                                      Icons.fastfood_outlined,
+                                      color: Colors.grey,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -135,18 +129,25 @@ class _CartScreenState extends State<CartScreen> {
                                   children: [
                                     Text(
                                       item.product.name,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
                                     ),
                                     Text(
                                       '${item.product.price.toStringAsFixed(0)} ₽',
-                                      style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w500),
+                                      style: TextStyle(
+                                        color: theme.colorScheme.primary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
                               Container(
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                  color: theme.colorScheme.surfaceContainerHighest
+                                      .withValues(alpha: 0.3),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
@@ -155,16 +156,28 @@ class _CartScreenState extends State<CartScreen> {
                                       icon: const Icon(Icons.remove, size: 18),
                                       onPressed: () {
                                         setState(() {
-                                          _cartService.updateQuantity(item.product.id, item.quantity - 1);
+                                          _cartService.updateQuantity(
+                                            item.product.id,
+                                            item.quantity - 1,
+                                          );
                                         });
                                       },
                                     ),
-                                    Text('${item.quantity}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                    Text(
+                                      '${item.quantity}',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                     IconButton(
                                       icon: const Icon(Icons.add, size: 18),
                                       onPressed: () {
                                         setState(() {
-                                          _cartService.updateQuantity(item.product.id, item.quantity + 1);
+                                          _cartService.updateQuantity(
+                                            item.product.id,
+                                            item.quantity + 1,
+                                          );
                                         });
                                       },
                                     ),
@@ -198,10 +211,17 @@ class _CartScreenState extends State<CartScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Итого к оплате:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const Text(
+                              'Итого к оплате:',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
                             Text(
                               '${_cartService.totalAmount.toStringAsFixed(0)} ₽',
-                              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
                             ),
                           ],
                         ),
@@ -214,10 +234,15 @@ class _CartScreenState extends State<CartScreen> {
                               backgroundColor: theme.colorScheme.primary,
                               foregroundColor: theme.colorScheme.onPrimary,
                               elevation: 2,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                             ),
                             onPressed: _placeOrder,
-                            child: const Text('ПОДТВЕРДИТЬ И ЗАКАЗАТЬ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              'ПОДТВЕРДИТЬ И ЗАКАЗАТЬ',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ],

@@ -4,7 +4,7 @@ class Booking {
   final DateTime startTime;
   final int durationHours;
   final double totalPrice;
-  final String status; // 'pending', 'confirmed', 'cancelled'
+  final String status;
 
   Booking({
     required this.id,
@@ -16,13 +16,23 @@ class Booking {
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'] ?? 0;
+    final rawStartTime = json['startTime'] ?? json['startAt'] ?? json['date'];
+    final rawDuration = json['duration'] ?? json['durationHours'] ?? json['hours'] ?? 1;
+    final rawPrice = json['totalPrice'] ?? json['price'] ?? json['amount'] ?? 0.0;
+    final rawPc = json['pc'];
+    final rawPcName = json['pcName'] ??
+        json['computerName'] ??
+        (rawPc is Map ? rawPc['name'] ?? rawPc['number'] : null) ??
+        'Неизвестный ПК';
+
     return Booking(
-      id: json['id'] ?? 0,
-      pcName: json['pcName'] ?? 'Неизвестный ПК',
-      startTime: DateTime.parse(json['startTime']),
-      durationHours: json['duration'] ?? 1,
-      totalPrice: (json['totalPrice'] as num?)?.toDouble() ?? 0.0,
-      status: json['status'] ?? 'pending',
+      id: rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0,
+      pcName: rawPcName.toString(),
+      startTime: DateTime.parse(rawStartTime.toString()),
+      durationHours: rawDuration is int ? rawDuration : int.tryParse(rawDuration.toString()) ?? 1,
+      totalPrice: (rawPrice as num?)?.toDouble() ?? 0.0,
+      status: (json['status'] ?? 'active').toString(),
     );
   }
 }

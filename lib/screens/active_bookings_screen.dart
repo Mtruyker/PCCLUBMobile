@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import '../services/client_api_service.dart';
-import '../models/booking.dart';
 import 'package:intl/intl.dart';
 
-class ActiveBookingsScreen extends StatefulWidget {
-  final int clientId;
+import '../models/booking.dart';
+import '../services/client_api_service.dart';
+import '../utils/error_handler.dart';
 
-  const ActiveBookingsScreen({super.key, required this.clientId});
+class ActiveBookingsScreen extends StatefulWidget {
+  const ActiveBookingsScreen({super.key});
 
   @override
   State<ActiveBookingsScreen> createState() => _ActiveBookingsScreenState();
@@ -25,13 +25,48 @@ class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
 
   Future<void> _loadBookings() async {
     try {
-      final bookings = await _apiService.getActiveBookings(widget.clientId);
+      final bookings = await _apiService.getActiveBookings();
+      if (!mounted) return;
       setState(() {
         _bookings = bookings;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
+      ErrorHandler.show(context, e, customMessage: 'Не удалось загрузить бронирования');
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+      case 'confirmed':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      case 'completed':
+      case 'expired':
+        return Colors.grey;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return 'Активна';
+      case 'confirmed':
+        return 'Подтверждена';
+      case 'cancelled':
+        return 'Отменена';
+      case 'completed':
+        return 'Завершена';
+      case 'expired':
+        return 'Истекла';
+      default:
+        return status;
     }
   }
 
@@ -51,8 +86,7 @@ class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
                       padding: const EdgeInsets.all(16),
                       itemCount: _bookings.length,
                       itemBuilder: (context, index) {
-                        final booking = _bookings[index];
-                        return _buildBookingCard(booking);
+                        return _buildBookingCard(_bookings[index]);
                       },
                     ),
             ),
@@ -77,7 +111,8 @@ class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
 
   Widget _buildBookingCard(Booking booking) {
     final endTime = booking.startTime.add(Duration(hours: booking.durationHours));
-    
+    final statusColor = _statusColor(booking.status);
+
     return Card(
       elevation: 3,
       margin: const EdgeInsets.only(bottom: 16),
@@ -93,19 +128,25 @@ class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  booking.pcName,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    booking.pcName,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: statusColor.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    booking.status.toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    _statusLabel(booking.status),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -141,7 +182,11 @@ class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
                     const Text('Стоимость:', style: TextStyle(color: Colors.grey)),
                     Text(
                       '${booking.totalPrice.toStringAsFixed(0)} ₽',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
                     ),
                   ],
                 ),

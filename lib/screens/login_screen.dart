@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../services/client_api_service.dart';
-import '../services/local_storage_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/error_handler.dart';
 import '../utils/validation_utils.dart';
-import '../theme/app_theme.dart';
 import 'main_screen.dart';
 import 'register_screen.dart';
 
@@ -16,9 +16,16 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const TextStyle _authInputStyle = TextStyle(
+    color: AppColors.textPrimary,
+    fontSize: 16,
+    fontWeight: FontWeight.w500,
+  );
+
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -34,10 +41,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final apiService = Provider.of<ClientApiService>(context, listen: false);
-      final clientId = await apiService.login(phone, password);
+      final session = await apiService.login(phone, password);
 
-      // Сохраняем полученный ID пользователя
-      await LocalStorageService.saveClientId(clientId);
+      if (!session.isAuthenticated) {
+        throw ApiException('Сервер не вернул токен авторизации');
+      }
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -50,7 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
         ErrorHandler.show(context, e);
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -72,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
               key: _formKey,
               child: Container(
                 decoration: AppTheme.authCardDecoration,
-                padding: const EdgeInsets.all(32.0),
+                padding: const EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -95,6 +105,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
+                      style: _authInputStyle,
+                      cursorColor: AppColors.primaryLight,
                       validator: ValidationUtils.validatePhone,
                       decoration: AppTheme.textFieldDecoration(
                         labelText: 'Номер телефона',
@@ -106,13 +118,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
+                      obscuringCharacter: '*',
+                      style: _authInputStyle,
+                      cursorColor: AppColors.primaryLight,
                       validator: ValidationUtils.validatePassword,
                       decoration: AppTheme.textFieldDecoration(
                         labelText: 'Пароль',
                         prefixIcon: Icons.lock_outline,
                         suffixIcon: PasswordVisibilityButton(
                           isVisible: !_obscurePassword,
-                          onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                          onToggle: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
                         ),
                       ),
                     ),
@@ -138,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
+                        const Text(
                           'Нет аккаунта?',
                           style: AppTheme.bodyStyle,
                         ),

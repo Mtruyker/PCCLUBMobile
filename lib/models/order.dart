@@ -3,7 +3,7 @@ class Order {
   final DateTime date;
   final List<OrderItem> items;
   final double totalAmount;
-  final String status; // 'pending', 'preparing', 'delivered', 'cancelled'
+  final String status;
 
   Order({
     required this.id,
@@ -14,15 +14,20 @@ class Order {
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
-    var list = json['items'] as List? ?? [];
-    List<OrderItem> itemsList = list.map((i) => OrderItem.fromJson(i)).toList();
+    final rawItems = json['items'] as List? ?? [];
+    final rawDate = json['date'] ?? json['createdAt'] ?? json['orderedAt'];
+    final rawTotal = json['totalAmount'] ?? json['total'] ?? json['amount'] ?? 0.0;
+    final rawId = json['id'] ?? 0;
 
     return Order(
-      id: json['id'] ?? 0,
-      date: DateTime.parse(json['date']),
-      items: itemsList,
-      totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
-      status: json['status'] ?? 'pending',
+      id: rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0,
+      date: DateTime.parse(rawDate.toString()),
+      items: rawItems
+          .whereType<Object>()
+          .map((item) => OrderItem.fromJson(Map<String, dynamic>.from(item as Map)))
+          .toList(),
+      totalAmount: (rawTotal as num?)?.toDouble() ?? 0.0,
+      status: (json['status'] ?? 'new').toString(),
     );
   }
 
@@ -49,10 +54,21 @@ class OrderItem {
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
+    final rawProduct = json['product'];
+    final rawName = json['productName'] ??
+        json['name'] ??
+        (rawProduct is Map ? rawProduct['name'] : null) ??
+        '';
+    final rawQuantity = json['quantity'] ?? 1;
+    final rawPrice = json['price'] ??
+        json['unitPrice'] ??
+        (rawProduct is Map ? rawProduct['price'] : null) ??
+        0.0;
+
     return OrderItem(
-      productName: json['productName'] ?? '',
-      quantity: json['quantity'] ?? 1,
-      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      productName: rawName.toString(),
+      quantity: rawQuantity is int ? rawQuantity : int.tryParse(rawQuantity.toString()) ?? 1,
+      price: (rawPrice as num?)?.toDouble() ?? 0.0,
     );
   }
 
