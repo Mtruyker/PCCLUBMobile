@@ -63,7 +63,7 @@ class _ClubMapScreenState extends State<ClubMapScreen> {
                           ? Colors.grey.shade900 
                           : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.blue.withOpacity(0.3), width: 2),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 2),
                     ),
                     child: Stack(
                       children: [
@@ -72,13 +72,13 @@ class _ClubMapScreenState extends State<ClubMapScreen> {
                           top: 10,
                           left: 10,
                           child: Text('VIP ZONE', 
-                            style: TextStyle(color: Colors.blue.withOpacity(0.5), fontWeight: FontWeight.bold)),
+                            style: TextStyle(color: Colors.blue.withValues(alpha: 0.5), fontWeight: FontWeight.bold)),
                         ),
                         Positioned(
                           top: 110,
                           left: 10,
                           child: Text('STANDARD ZONE', 
-                            style: TextStyle(color: Colors.grey.withOpacity(0.5), fontWeight: FontWeight.bold)),
+                            style: TextStyle(color: Colors.grey.withValues(alpha: 0.5), fontWeight: FontWeight.bold)),
                         ),
                         
                         // Отрисовка компьютеров
@@ -162,10 +162,10 @@ class _ClubMapScreenState extends State<ClubMapScreen> {
               width: 35,
               height: 35,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
+                color: color.withValues(alpha: 0.2),
                 border: Border.all(color: color, width: 2),
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: isSelected ? [BoxShadow(color: Colors.blue.withOpacity(0.5), blurRadius: 8)] : null,
+                boxShadow: isSelected ? [BoxShadow(color: Colors.blue.withValues(alpha: 0.5), blurRadius: 8)] : null,
               ),
               child: Icon(
                 pc['type'] == 'vip' ? Icons.star : Icons.computer,

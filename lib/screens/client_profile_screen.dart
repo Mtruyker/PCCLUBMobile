@@ -133,7 +133,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             children: [
               CircleAvatar(
                 radius: 40,
-                backgroundColor: Colors.blue.withOpacity(0.1),
+                backgroundColor: Colors.blue.withValues(alpha: 0.1),
                 child: Text(
                   _profile!.name.isNotEmpty ? _profile!.name[0].toUpperCase() : '?',
                   style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue),
@@ -236,8 +236,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     return Card(
       elevation: 0,
       color: isDestructive 
-          ? Colors.red.withOpacity(0.1) 
-          : Theme.of(context).cardTheme.color ?? Colors.grey.withOpacity(0.05),
+          ? Colors.red.withValues(alpha: 0.1)
+          : Theme.of(context).cardTheme.color ?? Colors.grey.withValues(alpha: 0.05),
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
         leading: Icon(icon, color: isDestructive ? Colors.red : Colors.blue),
@@ -297,7 +297,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
+            color: Colors.blue.withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),

@@ -123,7 +123,7 @@ class _CartScreenState extends State<CartScreen> {
                                   errorBuilder: (_, __, ___) => Container(
                                     width: 70,
                                     height: 70,
-                                    color: Colors.grey.withOpacity(0.2),
+                                    color: Colors.grey.withValues(alpha: 0.2),
                                     child: const Icon(Icons.fastfood_outlined, color: Colors.grey),
                                   ),
                                 ),
@@ -146,7 +146,7 @@ class _CartScreenState extends State<CartScreen> {
                               ),
                               Container(
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Row(
@@ -185,7 +185,7 @@ class _CartScreenState extends State<CartScreen> {
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 10,
                         offset: const Offset(0, -5),
                       ),
