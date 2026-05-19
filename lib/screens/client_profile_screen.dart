@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/client_api_service.dart';
 import '../services/local_storage_service.dart';
 import '../models/client_profile.dart';
-import '../main.dart';
+import '../providers/theme_provider.dart';
 import 'session_history_screen.dart';
 import 'active_bookings_screen.dart';
 import 'order_history_screen.dart';
@@ -64,9 +65,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           ),
           TextButton(
             onPressed: () async {
+              final navigator = Navigator.of(context);
               await LocalStorageService.clearSession();
               if (mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
+                navigator.pushAndRemoveUntil(
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
                   (route) => false,
                 );
@@ -197,9 +199,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             icon: isDark ? Icons.light_mode : Icons.dark_mode,
             title: isDark ? 'Светлая тема' : 'Темная тема',
             onTap: () {
-              MyApp.of(context).changeTheme(
-                isDark ? ThemeMode.light : ThemeMode.dark,
-              );
+              context.read<ThemeProvider>().toggleTheme();
             },
           ),
           _buildMenuTile(

@@ -1,6 +1,3 @@
-import 'cart_item.dart';
-import 'catalog_item.dart';
-
 class Order {
   final int id;
   final DateTime date;
@@ -28,6 +25,16 @@ class Order {
       status: json['status'] ?? 'pending',
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'date': date.toIso8601String(),
+      'items': items.map((item) => item.toJson()).toList(),
+      'totalAmount': totalAmount,
+      'status': status,
+    };
+  }
 }
 
 class OrderItem {
@@ -47,5 +54,13 @@ class OrderItem {
       quantity: json['quantity'] ?? 1,
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'productName': productName,
+      'quantity': quantity,
+      'price': price,
+    };
   }
 }

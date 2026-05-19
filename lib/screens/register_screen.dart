@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/client_api_service.dart';
 import '../services/local_storage_service.dart';
+import '../utils/error_handler.dart';
+import '../utils/validation_utils.dart';
+import '../theme/app_theme.dart';
 import 'main_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -11,37 +15,35 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _apiService = ClientApiService();
+  final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   Future<void> _handleRegister() async {
-    final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-
-    if (name.isEmpty || phone.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Пожалуйста, заполните обязательные поля'),
-        ),
-      );
+    if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    final name = _nameController.text.trim();
+    final phone = ValidationUtils.cleanPhoneNumber(_phoneController.text.trim());
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
     setState(() => _isLoading = true);
 
     try {
-      final clientId = await _apiService.register(name, phone, password, email);
+      final apiService = Provider.of<ClientApiService>(context, listen: false);
+      final clientId = await apiService.register(name, phone, password, email);
       await LocalStorageService.saveClientId(clientId);
-      await LocalStorageService.saveClientPassword(phone, password);
 
       if (mounted) {
+        ErrorHandler.showSuccess(context, 'Регистрация успешно завершена!');
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const MainScreen()),
@@ -50,10 +52,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final message = e.toString().replaceAll('Exception: ', '');
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка регистрации: $message')));
+        ErrorHandler.show(context, e);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -66,6 +65,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -76,87 +76,93 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       extendBodyBehindAppBar: true,
-      body: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.blue.shade800, Colors.blue.shade400],
-          ),
-        ),
+      body: GradientBackground(
+        gradient: AppColors.authGradientLight,
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.only(top: 80, bottom: 20),
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 100, 24, 20),
+            child: Form(
+              key: _formKey,
+              child: Container(
+                decoration: AppTheme.authCardDecoration,
                 padding: const EdgeInsets.all(32.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       'РЕГИСТРАЦИЯ',
-                      style: TextStyle(
+                      style: AppTheme.headingStyle.copyWith(
                         fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
+                        color: AppColors.primary,
                       ),
                     ),
                     const SizedBox(height: 32),
-                    TextField(
+                    TextFormField(
                       controller: _nameController,
-                      decoration: const InputDecoration(
+                      validator: ValidationUtils.validateName,
+                      decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Имя',
-                        prefixIcon: Icon(Icons.person),
-                        border: OutlineInputBorder(),
+                        prefixIcon: Icons.person,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextField(
+                    TextFormField(
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
+                      validator: ValidationUtils.validatePhone,
+                      decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Номер телефона',
-                        prefixIcon: Icon(Icons.phone),
-                        border: OutlineInputBorder(),
+                        prefixIcon: Icons.phone,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextField(
+                    TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
+                      validator: (value) {
+                        if (value != null && value.isNotEmpty) {
+                          return ValidationUtils.validateEmail(value);
+                        }
+                        return null; // Email необязательный
+                      },
+                      decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Email (необязательно)',
-                        prefixIcon: Icon(Icons.email),
-                        border: OutlineInputBorder(),
+                        prefixIcon: Icons.email,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextField(
+                    TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
-                      decoration: InputDecoration(
+                      validator: ValidationUtils.validatePassword,
+                      decoration: AppTheme.textFieldDecorationSimple(
                         labelText: 'Пароль',
-                        prefixIcon: const Icon(Icons.lock),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
+                        prefixIcon: Icons.lock,
+                        suffixIcon: PasswordVisibilityButton(
+                          isVisible: !_obscurePassword,
+                          onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _confirmPasswordController,
+                      obscureText: _obscureConfirmPassword,
+                      validator: (value) => ValidationUtils.validatePasswordConfirmation(
+                        value,
+                        _passwordController.text,
+                      ),
+                      decoration: AppTheme.textFieldDecorationSimple(
+                        labelText: 'Подтвердите пароль',
+                        prefixIcon: Icons.lock_outline,
+                        suffixIcon: PasswordVisibilityButton(
+                          isVisible: !_obscureConfirmPassword,
+                          onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
                         ),
                       ),
                     ),
@@ -165,18 +171,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
+                        style: AppTheme.primaryButtonStyle,
                         onPressed: _isLoading ? null : _handleRegister,
                         child: _isLoading
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                              )
+                            ? AppTheme.loadingIndicator()
                             : const Text(
                                 'ЗАРЕГИСТРИРОВАТЬСЯ',
                                 style: TextStyle(

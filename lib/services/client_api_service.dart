@@ -1,245 +1,240 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../config/env_config.dart';
 import '../models/client_profile.dart';
 import '../models/catalog_item.dart';
 import '../models/news_item.dart';
 import '../models/session.dart';
 import '../models/booking.dart';
 import '../models/cart_item.dart';
+import '../models/order.dart';
 import 'local_storage_service.dart';
 
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  ApiException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
+}
+
 class ClientApiService {
-  static const String baseUrl =
-      'https://serverpcclub-production.up.railway.app/api';
+  static final ClientApiService _instance = ClientApiService._internal();
+  factory ClientApiService() => _instance;
+  ClientApiService._internal();
 
-  // Получение профиля клиента
-  Future<ClientProfile> getClientProfile(int clientId) async {
+  String? _authToken;
+
+  void setAuthToken(String token) {
+    _authToken = token;
+  }
+
+  Map<String, String> get _headers {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (_authToken != null) {
+      headers['Authorization'] = 'Bearer $_authToken';
+    }
+    return headers;
+  }
+
+  Future<T> _request<T>(
+    Future<http.Response> Function() request,
+    T Function(dynamic) parser,
+  ) async {
     try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/clients'))
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        List<dynamic> data = json.decode(response.body);
-        var clientJson = data.firstWhere(
-          (c) => c['id'] == clientId,
-          orElse: () => throw Exception('Client not found'),
-        );
-        return ClientProfile.fromJson(clientJson);
+      final response = await request().timeout(EnvConfig.apiTimeout);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = json.decode(response.body);
+        return parser(data);
       } else {
-        throw Exception('Failed to load clients: ${response.statusCode}');
+        throw ApiException(_getErrorMessage(response), statusCode: response.statusCode);
       }
     } catch (e) {
-      return await LocalStorageService.getClientProfileFromBackup(clientId);
+      if (e is ApiException) rethrow;
+      throw ApiException('Сетевая ошибка: ${e.toString()}');
     }
-  }
-
-  // Регистрация нового клиента
-  Future<int> register(
-    String name,
-    String phone,
-    String password,
-    String email,
-  ) async {
-    final response = await http
-        .post(
-          Uri.parse('$baseUrl/clients'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'name': name,
-            'phone': phone,
-            'email': email,
-            'balance': 0.0,
-          }),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return data['id'];
-    } else {
-      throw Exception('Ошибка при регистрации: ${response.body}');
-    }
-  }
-
-  // Вход в систему (упрощенно)
-  Future<int> login(String phone, String password) async {
-    // В реальности здесь был бы запрос к /api/login, который возвращает JWT и ID
-    // Пока ищем клиента по номеру телефона в списке
-    final response = await http
-        .get(Uri.parse('$baseUrl/clients'))
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      List<dynamic> data = json.decode(response.body);
-      var client = data.firstWhere(
-        (c) => c['phone'] == phone,
-        orElse: () => throw Exception('Пользователь не найден'),
-      );
-      final serverPassword = client['password']?.toString();
-      final localPassword = LocalStorageService.getClientPassword(phone);
-      final savedPassword = serverPassword ?? localPassword;
-
-      if (savedPassword != null && savedPassword != password) {
-        throw Exception('Неверный пароль');
-      }
-      return client['id'];
-    } else {
-      throw Exception('Ошибка авторизации');
-    }
-  }
-
-  // Каталог товаров и услуг
-  Future<List<CatalogItem>> getCatalogItems() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/items'))
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      List<dynamic> data = json.decode(response.body);
-      return data.map((item) => CatalogItem.fromJson(item)).toList();
-    } else {
-      throw Exception('Failed to load catalog');
-    }
-  }
-
-  // Новости клуба
-  Future<List<NewsItem>> getNews() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/news'))
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      List<dynamic> data = json.decode(response.body);
-      return data.map((item) => NewsItem.fromJson(item)).toList();
-    } else {
-      throw Exception('Failed to load news');
-    }
-  }
-
-  // Оформление заказа (товары из корзины)
-  Future<bool> placeOrder(int clientId, List<CartItem> items) async {
-    final response = await http
-        .post(
-          Uri.parse('$baseUrl/orders'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'clientId': clientId,
-            'items': items
-                .map((i) => {'productId': i.product.id, 'quantity': i.quantity})
-                .toList(),
-            'date': DateTime.now().toIso8601String(),
-          }),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    return response.statusCode == 201 || response.statusCode == 200;
-  }
-
-  // История сессий клиента
-  Future<List<Session>> getSessionHistory(int clientId) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/clients/$clientId/sessions'))
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      List<dynamic> data = json.decode(response.body);
-      return data.map((s) => Session.fromJson(s)).toList();
-    } else {
-      throw Exception('Failed to load session history');
-    }
-  }
-
-  // Активные бронирования клиента
-  Future<List<Booking>> getActiveBookings(int clientId) async {
-    try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/clients/$clientId/bookings'))
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        List<dynamic> data = json.decode(response.body);
-        return data.map((b) => Booking.fromJson(b)).toList();
-      }
-      return [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  // Список доступных ПК для бронирования
-  Future<List<String>> getAvailablePCs() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/pcs/available'))
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      List<dynamic> data = json.decode(response.body);
-      return data
-          .map((pc) {
-            if (pc is String) return pc;
-            if (pc is Map<String, dynamic>) return pc['name']?.toString() ?? '';
-            return '';
-          })
-          .where((name) => name.isNotEmpty)
-          .toList();
-    } else {
-      throw Exception('Failed to load available PCs');
-    }
-  }
-
-  // Создание нового бронирования
-  Future<bool> createBooking(
-    int clientId,
-    String pcName,
-    DateTime startTime,
-    int duration,
-  ) async {
-    final response = await http
-        .post(
-          Uri.parse('$baseUrl/bookings'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'clientId': clientId,
-            'pcName': pcName,
-            'startTime': startTime.toIso8601String(),
-            'duration': duration,
-          }),
-        )
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      return true;
-    }
-
-    throw Exception(_getErrorMessage(response));
   }
 
   String _getErrorMessage(http.Response response) {
     try {
       final data = json.decode(response.body);
-      if (data is Map && data['error'] != null) {
-        return data['error'].toString();
+      if (data is Map) {
+        return (data['error'] ?? data['message'] ?? response.body).toString();
       }
-      if (data is Map && data['message'] != null) {
-        return data['message'].toString();
-      }
-    } catch (_) {
-      // Fall through to a generic HTTP message.
-    }
-
-    return 'HTTP ${response.statusCode}: ${response.body}';
+    } catch (_) {}
+    return 'Ошибка сервера (${response.statusCode})';
   }
 
-  // Обновление профиля клиента
-  Future<void> updateClient(ClientProfile profile) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/clients/${profile.id}'),
-      body: json.encode(profile.toJson()),
-      headers: {'Content-Type': 'application/json'},
+  Future<ClientProfile> getClientProfile(int clientId) async {
+    return _request(
+      () => http.get(
+        Uri.parse('${EnvConfig.apiBaseUrl}/clients'),
+        headers: _headers,
+      ),
+      (data) {
+        final list = data as List;
+        final clientJson = list.firstWhere(
+          (c) => c['id'] == clientId,
+          orElse: () => throw ApiException('Клиент не найден'),
+        );
+        return ClientProfile.fromJson(clientJson);
+      },
+    ).catchError((_) async {
+      final backup = await LocalStorageService.getClientProfileFromBackup(clientId);
+      if (backup != null) return backup;
+      throw ApiException('Нет сохранённых данных');
+    });
+  }
+
+  Future<int> register(String name, String phone, String password, String email) async {
+    return _request(
+      () => http.post(
+        Uri.parse('${EnvConfig.apiBaseUrl}/clients'),
+        headers: _headers,
+        body: json.encode({
+          'name': name,
+          'phone': phone,
+          'email': email,
+          'password': password,
+          'balance': 0.0,
+        }),
+      ),
+      (data) => data['id'] as int,
     );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to update client');
+  }
+
+  Future<int> login(String phone, String password) async {
+    return _request(
+      () => http.post(
+        Uri.parse('${EnvConfig.apiBaseUrl}/auth/login'),
+        headers: _headers,
+        body: json.encode({'phone': phone, 'password': password}),
+      ),
+      (data) {
+        if (data is Map) {
+          if (data['token'] != null) {
+            setAuthToken(data['token'].toString());
+          }
+          return data['clientId'] as int;
+        }
+        throw ApiException('Неверный формат ответа сервера');
+      },
+    );
+  }
+
+  Future<List<CatalogItem>> getCatalogItems() async {
+    return _request(
+      () => http.get(
+        Uri.parse('${EnvConfig.apiBaseUrl}/items'),
+        headers: _headers,
+      ),
+      (data) => (data as List).map((item) => CatalogItem.fromJson(item)).toList(),
+    );
+  }
+
+  Future<List<NewsItem>> getNews() async {
+    return _request(
+      () => http.get(
+        Uri.parse('${EnvConfig.apiBaseUrl}/news'),
+        headers: _headers,
+      ),
+      (data) => (data as List).map((item) => NewsItem.fromJson(item)).toList(),
+    );
+  }
+
+  Future<bool> placeOrder(int clientId, List<CartItem> items) async {
+    return _request(
+      () => http.post(
+        Uri.parse('${EnvConfig.apiBaseUrl}/orders'),
+        headers: _headers,
+        body: json.encode({
+          'clientId': clientId,
+          'items': items.map((i) => {'productId': i.product.id, 'quantity': i.quantity}).toList(),
+          'date': DateTime.now().toIso8601String(),
+        }),
+      ),
+      (_) => true,
+    );
+  }
+
+  Future<List<Session>> getSessionHistory(int clientId) async {
+    return _request(
+      () => http.get(
+        Uri.parse('${EnvConfig.apiBaseUrl}/clients/$clientId/sessions'),
+        headers: _headers,
+      ),
+      (data) => (data as List).map((s) => Session.fromJson(s)).toList(),
+    );
+  }
+
+  Future<List<Booking>> getActiveBookings(int clientId) async {
+    try {
+      return await _request(
+        () => http.get(
+          Uri.parse('${EnvConfig.apiBaseUrl}/clients/$clientId/bookings'),
+          headers: _headers,
+        ),
+        (data) => (data as List).map((b) => Booking.fromJson(b)).toList(),
+      );
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<String>> getAvailablePCs() async {
+    return _request(
+      () => http.get(
+        Uri.parse('${EnvConfig.apiBaseUrl}/pcs/available'),
+        headers: _headers,
+      ),
+      (data) => (data as List)
+          .map((pc) => pc is String ? pc : (pc as Map)['name']?.toString() ?? '')
+          .where((name) => name.isNotEmpty)
+          .toList(),
+    );
+  }
+
+  Future<bool> createBooking(int clientId, String pcName, DateTime startTime, int duration) async {
+    return _request(
+      () => http.post(
+        Uri.parse('${EnvConfig.apiBaseUrl}/bookings'),
+        headers: _headers,
+        body: json.encode({
+          'clientId': clientId,
+          'pcName': pcName,
+          'startTime': startTime.toIso8601String(),
+          'duration': duration,
+        }),
+      ).timeout(EnvConfig.apiTimeoutLong),
+      (_) => true,
+    );
+  }
+
+  Future<void> updateClient(ClientProfile profile) async {
+    await _request(
+      () => http.put(
+        Uri.parse('${EnvConfig.apiBaseUrl}/clients/${profile.id}'),
+        headers: _headers,
+        body: json.encode(profile.toJson()),
+      ),
+      (_) {},
+    );
+  }
+
+  Future<List<Order>> getClientOrders(int clientId) async {
+    try {
+      return await _request(
+        () => http.get(
+          Uri.parse('${EnvConfig.apiBaseUrl}/clients/$clientId/orders'),
+          headers: _headers,
+        ),
+        (data) => (data as List).map((o) => Order.fromJson(o)).toList(),
+      );
+    } catch (_) {
+      // Возвращаем пустой список если API недоступен
+      return [];
     }
   }
 }

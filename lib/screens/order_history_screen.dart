@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../services/client_api_service.dart';
 import '../models/order.dart';
+import '../services/client_api_service.dart';
+import '../utils/error_handler.dart';
 import 'package:intl/intl.dart';
 
 class OrderHistoryScreen extends StatefulWidget {
@@ -13,9 +14,9 @@ class OrderHistoryScreen extends StatefulWidget {
 }
 
 class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
-  final ClientApiService _apiService = ClientApiService();
   List<Order> _orders = [];
   bool _isLoading = true;
+  final ClientApiService _apiService = ClientApiService();
 
   @override
   void initState() {
@@ -25,36 +26,21 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
 
   Future<void> _loadOrders() async {
     try {
-      // Имитация получения заказов, пока эндпоинт на сервере может быть не готов
-      await Future.delayed(const Duration(milliseconds: 500));
-      // В реальности: _orders = await _apiService.getClientOrders(widget.clientId);
-      
-      // Заглушка для теста
-      _orders = [
-        Order(
-          id: 501,
-          date: DateTime.now().subtract(const Duration(days: 1)),
-          items: [
-            OrderItem(productName: 'Coca-Cola 0.5', quantity: 2, price: 90),
-            OrderItem(productName: 'Chips Lays', quantity: 1, price: 120),
-          ],
-          totalAmount: 300,
-          status: 'delivered',
-        ),
-        Order(
-          id: 502,
-          date: DateTime.now().subtract(const Duration(days: 3)),
-          items: [
-            OrderItem(productName: 'Energy Drink Red Bull', quantity: 1, price: 180),
-          ],
-          totalAmount: 180,
-          status: 'delivered',
-        ),
-      ];
-      
-      setState(() => _isLoading = false);
+      setState(() => _isLoading = true);
+
+      final orders = await _apiService.getClientOrders(widget.clientId);
+
+      if (mounted) {
+        setState(() {
+          _orders = orders;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ErrorHandler.show(context, e);
+      }
     }
   }
 
@@ -66,16 +52,29 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _orders.isEmpty
-              ? const Center(child: Text('Вы еще ничего не заказывали'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _orders.length,
-                  itemBuilder: (context, index) {
-                    final order = _orders[index];
-                    return _buildOrderCard(order);
-                  },
-                ),
+          : RefreshIndicator(
+              onRefresh: _loadOrders,
+              child: _orders.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text('Вы еще ничего не заказывали',
+                            style: TextStyle(fontSize: 16, color: Colors.grey)),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _orders.length,
+                      itemBuilder: (context, index) {
+                        final order = _orders[index];
+                        return _buildOrderCard(order);
+                      },
+                    ),
+            ),
     );
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/client_api_service.dart';
 import '../services/local_storage_service.dart';
+import '../utils/error_handler.dart';
 import 'package:intl/intl.dart';
 
 class BookingScreen extends StatefulWidget {
@@ -13,7 +15,6 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  final ClientApiService _apiService = ClientApiService();
   String? _selectedPc;
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
@@ -29,7 +30,8 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Future<void> _loadPcs() async {
     try {
-      final pcs = await _apiService.getAvailablePCs();
+      final apiService = Provider.of<ClientApiService>(context, listen: false);
+      final pcs = await apiService.getAvailablePCs();
       setState(() {
         _pcs = pcs;
         _isLoadingPcs = false;
@@ -44,6 +46,9 @@ class _BookingScreenState extends State<BookingScreen> {
       });
     } catch (e) {
       setState(() => _isLoadingPcs = false);
+      if (mounted) {
+        ErrorHandler.show(context, e, customMessage: 'Не удалось загрузить список компьютеров');
+      }
     }
   }
 
@@ -86,9 +91,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
     final clientId = LocalStorageService.getClientId();
     if (clientId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ошибка: пользователь не авторизован')),
-      );
+      ErrorHandler.show(context, 'Ошибка: пользователь не авторизован');
       return;
     }
 
@@ -106,56 +109,46 @@ class _BookingScreenState extends State<BookingScreen> {
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
-    late final bool success;
     try {
-      success = await _apiService.createBooking(
+      final apiService = Provider.of<ClientApiService>(context, listen: false);
+      final success = await apiService.createBooking(
         clientId,
         _selectedPc!,
         startDateTime,
         _duration,
       );
+
+      if (!mounted) return;
+      Navigator.pop(context); // Закрыть индикатор загрузки
+
+      if (success) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Успешно!'),
+            content: Text(
+              'Вы забронировали $_selectedPc на ${DateFormat('dd.MM HH:mm').format(startDateTime)}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Закрыть диалог
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context); // Вернуться назад
+                  }
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ErrorHandler.show(context, 'Ошибка при бронировании. Попробуйте другое время.');
+      }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // Закрыть индикатор загрузки
-      final message = e.toString().replaceAll('Exception: ', '');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при бронировании: $message')),
-      );
-      return;
-    }
-    if (!mounted) return;
-
-    Navigator.pop(context); // Закрыть индикатор загрузки
-
-    if (success) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Успешно!'),
-          content: Text(
-            'Вы забронировали $_selectedPc на ${DateFormat('dd.MM HH:mm').format(startDateTime)}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context); // Закрыть диалог
-                if (Navigator.canPop(context)) {
-                  Navigator.pop(
-                    context,
-                  ); // Вернуться назад, если открывали из каталога
-                }
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ошибка при бронировании. Попробуйте другое время.'),
-        ),
-      );
+      ErrorHandler.show(context, e, customMessage: 'Ошибка при бронировании');
     }
   }
 
