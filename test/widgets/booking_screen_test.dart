@@ -1,124 +1,112 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:pc_club_mobile/screens/booking_screen.dart';
+import 'package:pc_club_mobile/utils/error_handler.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    await initializeDateFormatting('ru');
+  });
+
   group('BookingScreen Widget Tests', () {
-    testWidgets('BookingScreen displays all required elements', (WidgetTester tester) async {
+    testWidgets('BookingScreen displays current booking UI', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: BookingScreen(),
+        MaterialApp(
+          home: BookingScreen(
+            loadAvailablePcs: () async => ['PC-01', 'PC-02'],
+          ),
         ),
       );
 
-      // Wait for initial render
-      await tester.pump();
-
-      // Check if all UI elements are present
-      expect(find.text('Бронирование ПК'), findsOneWidget);
-      expect(find.text('Выберите ПК:'), findsOneWidget);
-      expect(find.text('Дата и время:'), findsOneWidget);
-      expect(find.text('Продолжительность (часы):'), findsOneWidget);
-      expect(find.text('ЗАБРОНИРОВАТЬ'), findsOneWidget);
-    });
-
-    testWidgets('Duration validation works for empty field', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: BookingScreen(),
-        ),
-      );
-
-      await tester.pump();
-
-      // Try to submit form without entering duration
-      await tester.tap(find.text('ЗАБРОНИРОВАТЬ'));
-      await tester.pump();
-
-      // Should show validation error
-      expect(find.text('Введите продолжительность'), findsOneWidget);
-    });
-
-    testWidgets('Duration validation works for invalid values', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: BookingScreen(),
-        ),
-      );
-
-      await tester.pump();
-
-      // Find duration field and enter invalid duration
-      final durationField = find.byType(TextFormField);
-      await tester.enterText(durationField, '0');
-
-      // Try to submit form
-      await tester.tap(find.text('ЗАБРОНИРОВАТЬ'));
-      await tester.pump();
-
-      // Should show validation error
-      expect(find.text('Продолжительность должна быть от 1 до 12 часов'), findsOneWidget);
-    });
-
-    testWidgets('Duration validation works for maximum hours', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: BookingScreen(),
-        ),
-      );
-
-      await tester.pump();
-
-      // Find duration field and enter too high duration
-      final durationField = find.byType(TextFormField);
-      await tester.enterText(durationField, '15');
-
-      // Try to submit form
-      await tester.tap(find.text('ЗАБРОНИРОВАТЬ'));
-      await tester.pump();
-
-      // Should show validation error
-      expect(find.text('Продолжительность должна быть от 1 до 12 часов'), findsOneWidget);
-    });
-
-    testWidgets('Date picker opens when tapping date field', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: BookingScreen(),
-        ),
-      );
-
-      await tester.pump();
-
-      // Find and tap date field
-      final dateField = find.byIcon(Icons.calendar_today);
-      await tester.tap(dateField);
       await tester.pumpAndSettle();
 
-      // Should open date picker
+      expect(find.text('Бронирование'), findsOneWidget);
+      expect(find.text('Выберите компьютер:'), findsOneWidget);
+      expect(find.text('Дата и время:'), findsOneWidget);
+      expect(find.text('Длительность:'), findsOneWidget);
+      expect(find.text('Подтвердить бронирование'), findsOneWidget);
+      expect(find.text('PC-01'), findsOneWidget);
+      expect(find.text('1 ч.'), findsAtLeastNWidgets(1));
+    });
+
+    testWidgets('Initial PC name is matched by digits', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BookingScreen(
+            initialPcName: 'Стол 1',
+            loadAvailablePcs: () async => ['PC-01', 'PC-02'],
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('PC-01'), findsOneWidget);
+    });
+
+    testWidgets('Date picker opens when tapping date tile', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BookingScreen(
+            loadAvailablePcs: () async => ['PC-01'],
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Дата'));
+      await tester.pumpAndSettle();
+
       expect(find.byType(DatePickerDialog), findsOneWidget);
     });
 
-    testWidgets('Valid duration passes validation', (WidgetTester tester) async {
+    testWidgets('Shows empty state when no PCs are available', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: BookingScreen(),
+        MaterialApp(
+          home: BookingScreen(
+            loadAvailablePcs: () async => [],
+          ),
         ),
       );
 
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      // Enter valid duration
-      final durationField = find.byType(TextFormField);
-      await tester.enterText(durationField, '2');
+      expect(find.text('Нет свободных компьютеров'), findsOneWidget);
+      final button = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+      expect(button.onPressed, isNull);
+    });
 
-      // Try to submit form
-      await tester.tap(find.text('ЗАБРОНИРОВАТЬ'));
-      await tester.pump();
+    testWidgets('Shows retry state when loading PCs fails', (WidgetTester tester) async {
+      var attempts = 0;
 
-      // Should not show duration validation error
-      expect(find.text('Продолжительность должна быть от 1 до 12 часов'), findsNothing);
-      expect(find.text('Введите продолжительность'), findsNothing);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BookingScreen(
+            loadAvailablePcs: () async {
+              attempts++;
+              if (attempts == 1) {
+                throw Exception('network failed');
+              }
+              return ['PC-05'];
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Не удалось загрузить список компьютеров'), findsWidgets);
+      expect(find.text('Повторить'), findsOneWidget);
+
+      await tester.tap(find.text('Повторить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('PC-05'), findsOneWidget);
+      expect(find.byType(ErrorStateWidget), findsNothing);
     });
   });
 }

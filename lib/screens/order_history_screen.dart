@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../models/order.dart';
 import '../services/client_api_service.dart';
@@ -13,19 +14,25 @@ class OrderHistoryScreen extends StatefulWidget {
 }
 
 class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
+  late final ClientApiService _apiService;
   List<Order> _orders = [];
   bool _isLoading = true;
-  final ClientApiService _apiService = ClientApiService();
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _apiService = context.read<ClientApiService>();
     _loadOrders();
   }
 
   Future<void> _loadOrders() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      setState(() => _isLoading = true);
       final orders = await _apiService.getClientOrders();
 
       if (!mounted) return;
@@ -35,7 +42,10 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Не удалось загрузить заказы';
+      });
       ErrorHandler.show(context, e, customMessage: 'Не удалось загрузить заказы');
     }
   }
@@ -81,30 +91,39 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadOrders,
-              child: _orders.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text(
-                            'Вы еще ничего не заказывали',
-                            style: TextStyle(fontSize: 16, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _orders.length,
-                      itemBuilder: (context, index) {
-                        return _buildOrderCard(_orders[index]);
-                      },
-                    ),
-            ),
+          : _errorMessage != null
+              ? ErrorStateWidget(
+                  message: _errorMessage!,
+                  onRetry: _loadOrders,
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadOrders,
+                  child: _orders.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _orders.length,
+                          itemBuilder: (context, index) {
+                            return _buildOrderCard(_orders[index]);
+                          },
+                        ),
+                ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey),
+          SizedBox(height: 16),
+          Text(
+            'Вы еще ничего не заказывали',
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+        ],
+      ),
     );
   }
 

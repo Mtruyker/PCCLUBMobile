@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../services/cart_service.dart';
 import '../services/client_api_service.dart';
@@ -12,31 +13,34 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
-  final CartService _cartService = CartService();
-  final ClientApiService _apiService = ClientApiService();
+  late final CartService _cartService;
+  late final ClientApiService _apiService;
+
+  @override
+  void initState() {
+    super.initState();
+    _cartService = context.read<CartService>();
+    _apiService = context.read<ClientApiService>();
+  }
 
   Future<void> _placeOrder() async {
     if (_cartService.items.isEmpty) {
       return;
     }
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
+    LoadingOverlay.show(context);
 
     try {
       final success = await _apiService.placeOrder(_cartService.items);
 
       if (!mounted) return;
-      Navigator.pop(context);
+      LoadingOverlay.hide(context);
 
       if (success) {
         _cartService.clearCart();
-        showDialog(
+        showDialog<void>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (dialogContext) => AlertDialog(
             title: const Text('Заказ принят!'),
             content: const Text(
               'Ваш заказ отправлен на сервер и появится в истории после обработки.',
@@ -44,8 +48,8 @@ class _CartScreenState extends State<CartScreen> {
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
+                  Navigator.of(dialogContext).pop();
+                  Navigator.of(context).pop();
                 },
                 child: const Text('Отлично'),
               ),
@@ -57,7 +61,7 @@ class _CartScreenState extends State<CartScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context);
+      LoadingOverlay.hide(context);
       ErrorHandler.show(context, e, customMessage: 'Ошибка при оформлении заказа');
     }
   }
@@ -74,7 +78,7 @@ class _CartScreenState extends State<CartScreen> {
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
               onPressed: () {
-                setState(() => _cartService.clearCart());
+                setState(_cartService.clearCart);
               },
             ),
         ],
@@ -86,7 +90,10 @@ class _CartScreenState extends State<CartScreen> {
                 children: [
                   Icon(Icons.shopping_basket_outlined, size: 100, color: Colors.grey),
                   SizedBox(height: 16),
-                  Text('Корзина пуста', style: TextStyle(fontSize: 20, color: Colors.grey)),
+                  Text(
+                    'Корзина пуста',
+                    style: TextStyle(fontSize: 20, color: Colors.grey),
+                  ),
                 ],
               ),
             )

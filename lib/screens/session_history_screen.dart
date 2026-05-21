@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../models/session.dart';
 import '../services/client_api_service.dart';
@@ -13,13 +14,14 @@ class SessionHistoryScreen extends StatefulWidget {
 }
 
 class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
-  final ClientApiService _apiService = ClientApiService();
+  late final ClientApiService _apiService;
   List<Session> _sessions = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _apiService = context.read<ClientApiService>();
     _loadHistory();
   }
 

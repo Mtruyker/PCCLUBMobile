@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../models/booking.dart';
 import '../services/client_api_service.dart';
@@ -13,17 +14,24 @@ class ActiveBookingsScreen extends StatefulWidget {
 }
 
 class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
-  final ClientApiService _apiService = ClientApiService();
+  late final ClientApiService _apiService;
   List<Booking> _bookings = [];
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _apiService = context.read<ClientApiService>();
     _loadBookings();
   }
 
   Future<void> _loadBookings() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final bookings = await _apiService.getActiveBookings();
       if (!mounted) return;
@@ -33,8 +41,15 @@ class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      ErrorHandler.show(context, e, customMessage: 'Не удалось загрузить бронирования');
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Не удалось загрузить бронирования';
+      });
+      ErrorHandler.show(
+        context,
+        e,
+        customMessage: 'Не удалось загрузить бронирования',
+      );
     }
   }
 
@@ -78,18 +93,23 @@ class _ActiveBookingsScreenState extends State<ActiveBookingsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadBookings,
-              child: _bookings.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _bookings.length,
-                      itemBuilder: (context, index) {
-                        return _buildBookingCard(_bookings[index]);
-                      },
-                    ),
-            ),
+          : _errorMessage != null
+              ? ErrorStateWidget(
+                  message: _errorMessage!,
+                  onRetry: _loadBookings,
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadBookings,
+                  child: _bookings.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _bookings.length,
+                          itemBuilder: (context, index) {
+                            return _buildBookingCard(_bookings[index]);
+                          },
+                        ),
+                ),
     );
   }
 

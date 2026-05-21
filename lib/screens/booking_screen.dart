@@ -7,8 +7,15 @@ import '../utils/error_handler.dart';
 
 class BookingScreen extends StatefulWidget {
   final String? initialPcName;
+  final Future<List<String>> Function()? loadAvailablePcs;
+  final Future<bool> Function(String pcName, DateTime startTime, int duration)? submitBooking;
 
-  const BookingScreen({super.key, this.initialPcName});
+  const BookingScreen({
+    super.key,
+    this.initialPcName,
+    this.loadAvailablePcs,
+    this.submitBooking,
+  });
 
   @override
   State<BookingScreen> createState() => _BookingScreenState();
@@ -21,18 +28,35 @@ class _BookingScreenState extends State<BookingScreen> {
   int _duration = 1;
   List<String> _pcs = [];
   bool _isLoadingPcs = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadPcs();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadPcs();
+      }
+    });
+  }
+
+  ClientApiService _getApiService() {
+    return Provider.of<ClientApiService?>(context, listen: false) ?? ClientApiService();
   }
 
   Future<void> _loadPcs() async {
+    setState(() {
+      _isLoadingPcs = true;
+      _errorMessage = null;
+    });
+
     try {
-      final apiService = Provider.of<ClientApiService>(context, listen: false);
-      final pcs = await apiService.getAvailablePCs();
+      final pcs = await (widget.loadAvailablePcs?.call() ?? _getApiService().getAvailablePCs());
       final matchedInitialPc = _matchPcName(widget.initialPcName, pcs);
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _pcs = pcs;
@@ -42,17 +66,25 @@ class _BookingScreenState extends State<BookingScreen> {
           _selectedPc = matchedInitialPc;
         } else if (_pcs.isNotEmpty) {
           _selectedPc = _pcs.first;
+        } else {
+          _selectedPc = null;
         }
       });
     } catch (e) {
-      setState(() => _isLoadingPcs = false);
-      if (mounted) {
-        ErrorHandler.show(
-          context,
-          e,
-          customMessage: 'Не удалось загрузить список компьютеров',
-        );
+      if (!mounted) {
+        return;
       }
+
+      setState(() {
+        _isLoadingPcs = false;
+        _errorMessage = 'Не удалось загрузить список компьютеров';
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ErrorHandler.show(context, e, customMessage: _errorMessage);
+        }
+      });
     }
   }
 
@@ -93,11 +125,15 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _selectDate() async {
+    final now = DateTime.now();
+    final firstDate = DateTime(now.year, now.month, now.day);
+    final initialDate = _selectedDate.isBefore(firstDate) ? firstDate : _selectedDate;
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 7)),
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: firstDate.add(const Duration(days: 7)),
     );
     if (picked != null && picked != _selectedDate) {
       setState(() => _selectedDate = picked);
@@ -126,6 +162,14 @@ class _BookingScreenState extends State<BookingScreen> {
     return '$hour:$minute';
   }
 
+  String _formatBookingDate(DateTime date) {
+    try {
+      return DateFormat('dd MMMM yyyy', 'ru').format(date);
+    } catch (_) {
+      return DateFormat('dd.MM.yyyy').format(date);
+    }
+  }
+
   Future<void> _confirmBooking() async {
     if (_selectedPc == null) {
       return;
@@ -139,27 +183,22 @@ class _BookingScreenState extends State<BookingScreen> {
       _selectedTime.minute,
     );
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
+    LoadingOverlay.show(context);
 
     try {
-      final apiService = Provider.of<ClientApiService>(context, listen: false);
-      final success = await apiService.createBooking(
-        _selectedPc!,
-        startDateTime,
-        _duration,
-      );
+      final success = await (widget.submitBooking?.call(_selectedPc!, startDateTime, _duration) ??
+          _getApiService().createBooking(_selectedPc!, startDateTime, _duration));
 
-      if (!mounted) return;
-      Navigator.pop(context);
+      if (!mounted) {
+        return;
+      }
+
+      LoadingOverlay.hide(context);
 
       if (success) {
-        showDialog(
+        showDialog<void>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (dialogContext) => AlertDialog(
             title: const Text('Успешно!'),
             content: Text(
               'Вы забронировали $_selectedPc на ${DateFormat('dd.MM HH:mm').format(startDateTime)}',
@@ -167,9 +206,9 @@ class _BookingScreenState extends State<BookingScreen> {
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context);
-                  if (Navigator.canPop(context)) {
-                    Navigator.pop(context);
+                  Navigator.of(dialogContext).pop();
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
                   }
                 },
                 child: const Text('OK'),
@@ -184,8 +223,11 @@ class _BookingScreenState extends State<BookingScreen> {
         );
       }
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
+      if (!mounted) {
+        return;
+      }
+
+      LoadingOverlay.hide(context);
       ErrorHandler.show(context, e, customMessage: 'Ошибка при бронировании');
     }
   }
@@ -196,128 +238,131 @@ class _BookingScreenState extends State<BookingScreen> {
       appBar: AppBar(title: const Text('Бронирование')),
       body: _isLoadingPcs
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Выберите компьютер:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_pcs.isEmpty)
-                    const Text(
-                      'Нет свободных компьютеров',
-                      style: TextStyle(color: Colors.grey),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          value: _selectedPc,
-                          items: _pcs
-                              .map(
-                                (pc) => DropdownMenuItem<String>(
-                                  value: pc,
-                                  child: Text(pc),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) => setState(() => _selectedPc = value),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Дата и время:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  Card(
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: const Icon(
-                            Icons.calendar_today,
-                            color: Colors.blue,
-                          ),
-                          title: const Text('Дата'),
-                          subtitle: Text(
-                            DateFormat('dd MMMM yyyy', 'ru').format(_selectedDate),
-                          ),
-                          onTap: _selectDate,
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(
-                            Icons.access_time,
-                            color: Colors.blue,
-                          ),
-                          title: const Text('Время начала'),
-                          subtitle: Text(_formatTime(_selectedTime)),
-                          onTap: _selectTime,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          : _errorMessage != null
+              ? ErrorStateWidget(
+                  message: _errorMessage!,
+                  onRetry: _loadPcs,
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Длительность:',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                        'Выберите компьютер:',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_pcs.isEmpty)
+                        const Text(
+                          'Нет свободных компьютеров',
+                          style: TextStyle(color: Colors.grey),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              value: _selectedPc,
+                              items: _pcs
+                                  .map(
+                                    (pc) => DropdownMenuItem<String>(
+                                      value: pc,
+                                      child: Text(pc),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) => setState(() => _selectedPc = value),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Дата и время:',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      Card(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: const Icon(
+                                Icons.calendar_today,
+                                color: Colors.blue,
+                              ),
+                              title: const Text('Дата'),
+                              subtitle: Text(_formatBookingDate(_selectedDate)),
+                              onTap: _selectDate,
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(
+                                Icons.access_time,
+                                color: Colors.blue,
+                              ),
+                              title: const Text('Время начала'),
+                              subtitle: Text(_formatTime(_selectedTime)),
+                              onTap: _selectTime,
+                            ),
+                          ],
                         ),
                       ),
-                      Text(
-                        '$_duration ч.',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Длительность:',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '$_duration ч.',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              color: Colors.blue,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: _duration.toDouble(),
+                        min: 1,
+                        max: 12,
+                        divisions: 11,
+                        label: '$_duration ч.',
+                        onChanged: (value) => setState(() => _duration = value.toInt()),
+                      ),
+                      const SizedBox(height: 40),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: _pcs.isEmpty ? null : _confirmBooking,
+                          child: const Text(
+                            'Подтвердить бронирование',
+                            style: TextStyle(fontSize: 18),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  Slider(
-                    value: _duration.toDouble(),
-                    min: 1,
-                    max: 12,
-                    divisions: 11,
-                    label: '$_duration ч.',
-                    onChanged: (value) => setState(() => _duration = value.toInt()),
-                  ),
-                  const SizedBox(height: 40),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: _pcs.isEmpty ? null : _confirmBooking,
-                      child: const Text(
-                        'Подтвердить бронирование',
-                        style: TextStyle(fontSize: 18),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
     );
   }
 }

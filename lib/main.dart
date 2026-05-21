@@ -6,9 +6,11 @@ import 'providers/app_providers.dart';
 import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
+import 'services/cache_service.dart';
 import 'services/client_api_service.dart';
 import 'services/local_storage_service.dart';
 import 'theme/app_theme.dart';
+import 'utils/smooth_scroll.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +18,11 @@ void main() async {
   try {
     await initializeDateFormatting('ru', null);
     await LocalStorageService.init();
+    await CacheService.init();
     await ClientApiService().restoreSession();
+
+    // Очищаем истекший кэш при запуске
+    await CacheService.clearExpired();
 
     final authToken = await LocalStorageService.getAuthToken();
 
@@ -51,6 +57,8 @@ class PcClubApp extends StatelessWidget {
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
+            // Применяем кастомное поведение скролла глобально
+            scrollBehavior: CustomScrollBehavior(),
             home: isLoggedIn ? const MainScreen() : const LoginScreen(),
           );
         },

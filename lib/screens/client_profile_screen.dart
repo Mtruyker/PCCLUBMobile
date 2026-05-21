@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models/client_profile.dart';
 import '../providers/theme_provider.dart';
 import '../services/client_api_service.dart';
-import '../services/local_storage_service.dart';
 import '../utils/error_handler.dart';
 import 'active_bookings_screen.dart';
 import 'login_screen.dart';
@@ -27,7 +26,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _apiService = ClientApiService();
+    _apiService = context.read<ClientApiService>();
     loadProfile();
   }
 
@@ -77,7 +76,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     }
 
     final navigator = Navigator.of(context);
-    await LocalStorageService.clearSession();
+    await _apiService.clearAuthToken();
 
     if (mounted) {
       navigator.pushAndRemoveUntil(

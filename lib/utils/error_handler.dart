@@ -1,8 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../screens/login_screen.dart';
+import '../services/client_api_service.dart';
+
 class ErrorHandler {
   static void show(BuildContext context, Object error, {String? customMessage}) {
+    if (_handleSessionExpired(context, error, customMessage: customMessage)) {
+      return;
+    }
+
     final message = customMessage ?? _extractMessage(error);
 
     if (context.mounted) {
@@ -34,6 +41,10 @@ class ErrorHandler {
     VoidCallback? onRetry,
     String retryButtonText = 'Повторить',
   }) {
+    if (_handleSessionExpired(context, error, customMessage: customMessage)) {
+      return;
+    }
+
     final message = customMessage ?? _extractMessage(error);
 
     if (context.mounted) {
@@ -80,6 +91,10 @@ class ErrorHandler {
   }
 
   static void showBanner(BuildContext context, Object error, {String? customMessage}) {
+    if (_handleSessionExpired(context, error, customMessage: customMessage)) {
+      return;
+    }
+
     final message = customMessage ?? _extractMessage(error);
 
     if (context.mounted) {
@@ -146,6 +161,45 @@ class ErrorHandler {
         debugPrint('Stack trace: ${error.stackTrace}');
       }
     }
+  }
+
+  static bool _handleSessionExpired(
+    BuildContext context,
+    Object error, {
+    String? customMessage,
+  }) {
+    if (error is! SessionExpiredException || !context.mounted) {
+      return false;
+    }
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(customMessage ?? error.message),
+        backgroundColor: Colors.orange.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+
+    final isOnLoginScreen =
+        context.widget is LoginScreen || context.findAncestorWidgetOfExactType<LoginScreen>() != null;
+
+    if (!isOnLoginScreen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) {
+          return;
+        }
+
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      });
+    }
+
+    _logError(error);
+    return true;
   }
 
   static String handleApiError(int statusCode, String? message) {

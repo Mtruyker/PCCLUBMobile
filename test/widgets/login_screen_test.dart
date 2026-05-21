@@ -12,11 +12,12 @@ void main() {
       );
 
       // Check if all UI elements are present
-      expect(find.text('Добро пожаловать!'), findsOneWidget);
-      expect(find.text('Войдите в свой аккаунт'), findsOneWidget);
+      expect(find.text('CYBER CLUB'), findsOneWidget);
+      expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
       expect(find.byType(TextFormField), findsNWidgets(2)); // Phone and password fields
       expect(find.text('ВОЙТИ'), findsOneWidget);
-      expect(find.text('Нет аккаунта? Зарегистрируйтесь'), findsOneWidget);
+      expect(find.text('Нет аккаунта?'), findsOneWidget);
+      expect(find.text('Зарегистрироваться'), findsOneWidget);
     });
 
     testWidgets('Password visibility toggle works', (WidgetTester tester) async {
@@ -70,7 +71,7 @@ void main() {
       await tester.pump();
 
       // Should show validation error
-      expect(find.text('Введите корректный номер телефона'), findsOneWidget);
+      expect(find.text('Номер телефона должен содержать 10-11 цифр'), findsOneWidget);
     });
 
     testWidgets('Password field validation works', (WidgetTester tester) async {
